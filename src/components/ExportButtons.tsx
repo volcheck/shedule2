@@ -1,6 +1,6 @@
 import { Doctor, ScheduleEntry, COLUMNS, MONTHS, HOURS_DAY, HOURS_NIGHT, DAY_SHIFT_COLUMNS } from '../types';
 import { jsPDF } from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 
 interface Props {
   doctors: Doctor[];
@@ -8,12 +8,6 @@ interface Props {
   year: number;
   month: number;
   days: number[];
-}
-
-declare module 'jspdf' {
-  interface jsPDF {
-    autoTable: (options: any) => jsPDF;
-  }
 }
 
 export default function ExportButtons({ doctors, entries, year, month, days }: Props) {
@@ -101,7 +95,7 @@ export default function ExportButtons({ doctors, entries, year, month, days }: P
       body.push(row);
     });
 
-    doc.autoTable({
+    autoTable(doc, {
       head,
       body,
       startY: 22,
@@ -132,7 +126,7 @@ export default function ExportButtons({ doctors, entries, year, month, days }: P
       ]);
     });
 
-    doc.autoTable({
+    autoTable(doc, {
       head: workloadHead,
       body: workloadBody,
       startY: finalY + 20,
