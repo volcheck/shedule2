@@ -9,7 +9,6 @@ interface Props {
 function DraggableDoctorCard({ doctor, onDelete }: Props) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: `doctor-${doctor.id}`,
-    data: { doctor },
   });
 
   const style = transform ? {

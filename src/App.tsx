@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import {
   DndContext,
   DragEndEvent,
@@ -8,7 +8,7 @@ import {
   useSensors,
   DragOverlay,
 } from '@dnd-kit/core';
-import { Doctor, ScheduleEntry, MONTHS } from './types';
+import { Doctor, ScheduleEntry, MONTHS, getExtendedDays } from './types';
 import {
   getDoctors,
   addDoctor as storeAddDoctor,
@@ -22,11 +22,6 @@ import ScheduleTable from './components/ScheduleTable';
 import WorkloadTable from './components/WorkloadTable';
 import ExportButtons from './components/ExportButtons';
 
-function getDaysInMonth(year: number, month: number): number[] {
-  const daysCount = new Date(year, month, 0).getDate();
-  return Array.from({ length: daysCount }, (_, i) => i + 1);
-}
-
 function App() {
   const currentYear = new Date().getFullYear();
   const currentMonth = new Date().getMonth() + 1;
@@ -34,12 +29,32 @@ function App() {
   const [year, setYear] = useState(currentYear);
   const [month, setMonth] = useState(currentMonth);
   const [doctors, setDoctors] = useState<Doctor[]>(() => getDoctors());
-  const [entries, setEntries] = useState<ScheduleEntry[]>(() => getEntriesForMonth(currentYear, currentMonth));
+  const [entriesByMonth, setEntriesByMonth] = useState<Record<string, ScheduleEntry[]>>({});
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [activeDoctor, setActiveDoctor] = useState<Doctor | null>(null);
-  const [activeEntry, setActiveEntry] = useState<{ entry: ScheduleEntry; doctor: Doctor } | null>(null);
+  const [activeEntry, setActiveEntry] = useState<{ entry: ScheduleEntry; doctor: Doctor; year: number; month: number } | null>(null);
 
-  const days = useMemo(() => getDaysInMonth(year, month), [year, month]);
+  const extendedDays = useMemo(() => getExtendedDays(year, month), [year, month]);
+
+  // Загрузка записей для всех нужных месяцев
+  const loadEntries = useCallback((y: number, m: number) => {
+    const days = getExtendedDays(y, m);
+    const monthsToLoad = new Set<string>();
+    days.forEach(d => monthsToLoad.add(`${d.year}-${d.month}`));
+
+    const newEntries: Record<string, ScheduleEntry[]> = {};
+    monthsToLoad.forEach(key => {
+      const [yr, mo] = key.split('-').map(Number);
+      newEntries[key] = getEntriesForMonth(yr, mo);
+    });
+    setEntriesByMonth(newEntries);
+  }, []);
+
+  // Первоначальная загрузка
+  useEffect(() => {
+    loadEntries(year, month);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [year, month]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -50,7 +65,6 @@ function App() {
   const handleMonthChange = useCallback((newYear: number, newMonth: number) => {
     setYear(newYear);
     setMonth(newMonth);
-    setEntries(getEntriesForMonth(newYear, newMonth));
   }, []);
 
   const handleAddDoctor = useCallback((doctor: Doctor) => {
@@ -62,23 +76,60 @@ function App() {
     if (!confirm('Удалить врача? Все его назначения в графике будут удалены.')) return;
     storeDeleteDoctor(id);
     setDoctors(getDoctors());
-    setEntries(getEntriesForMonth(year, month));
-  }, [year, month]);
+    loadEntries(year, month);
+  }, [year, month, loadEntries]);
 
-  const saveCurrentEntries = useCallback((newEntries: ScheduleEntry[]) => {
-    setEntries(newEntries);
-    saveEntriesForMonth(year, month, newEntries);
-  }, [year, month]);
+  const saveEntry = useCallback((targetYear: number, targetMonth: number, newEntries: ScheduleEntry[]) => {
+    saveEntriesForMonth(targetYear, targetMonth, newEntries);
+    setEntriesByMonth(prev => ({
+      ...prev,
+      [`${targetYear}-${targetMonth}`]: newEntries,
+    }));
+  }, []);
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
     const { active } = event;
-    const data = active.data.current;
-    if (data?.doctor && !data?.entry) {
-      setActiveDoctor(data.doctor);
-    } else if (data?.entry && data?.doctor) {
-      setActiveEntry({ entry: data.entry, doctor: data.doctor });
+    const id = String(active.id);
+
+    // Из списка врачей
+    if (id.startsWith('doctor-')) {
+      const doctorId = id.replace('doctor-', '');
+      const doctor = doctors.find(d => d.id === doctorId);
+      if (doctor) setActiveDoctor(doctor);
+      return;
     }
-  }, []);
+
+    // Из таблицы (entry-year-month-day-column-doctorId)
+    if (id.startsWith('entry-')) {
+      const parts = id.split('-');
+      // entry-YEAR-MONTH-DAY-COLUMN-DOCTORID
+      const entryYear = parseInt(parts[1]);
+      const entryMonth = parseInt(parts[2]);
+      const entryDay = parseInt(parts[3]);
+      const entryColumn = parseInt(parts[4]);
+      const doctorId = parts.slice(5).join('-');
+
+      const key = `${entryYear}-${entryMonth}`;
+      const entries = entriesByMonth[key] || [];
+      const entry = entries.find(e => e.day === entryDay && e.column === entryColumn);
+      const doctor = doctors.find(d => d.id === doctorId);
+
+      if (entry && doctor) {
+        setActiveEntry({ entry, doctor, year: entryYear, month: entryMonth });
+      }
+    }
+  }, [doctors, entriesByMonth]);
+
+  const parseCellId = (cellId: string): { year: number; month: number; day: number; column: number } | null => {
+    if (!cellId.startsWith('cell-')) return null;
+    const parts = cellId.split('-');
+    return {
+      year: parseInt(parts[1]),
+      month: parseInt(parts[2]),
+      day: parseInt(parts[3]),
+      column: parseInt(parts[4]),
+    };
+  };
 
   const handleDragEnd = useCallback((event: DragEndEvent) => {
     const { active, over } = event;
@@ -87,68 +138,111 @@ function App() {
 
     if (!over) return;
 
-    const activeData = active.data.current;
-    const overData = over.data.current;
+    const overId = String(over.id);
+    const target = parseCellId(overId);
+    if (!target) return;
 
-    // Check if we're dropping on a cell
-    if (overData?.day === undefined || overData?.column === undefined) return;
+    // Проверка: нельзя редактировать read-only дни
+    const targetExtDay = extendedDays.find(d =>
+      d.year === target.year && d.month === target.month && d.day === target.day
+    );
+    if (targetExtDay?.isReadOnly) return;
 
-    const targetDay = overData.day;
-    const targetCol = overData.column;
+    const activeId = String(active.id);
 
-    // Dragging from doctor list to cell
-    if (activeData?.doctor && !activeData?.entry) {
-      const newEntries = [...entries];
+    // Drag from doctor list
+    if (activeId.startsWith('doctor-')) {
+      const doctorId = activeId.replace('doctor-', '');
+      const key = `${target.year}-${target.month}`;
+      const currentEntries = [...(entriesByMonth[key] || [])];
 
-      // Remove existing entry at target if any
-      const existingIdx = newEntries.findIndex(e => e.day === targetDay && e.column === targetCol);
+      // Remove existing entry at target
+      const existingIdx = currentEntries.findIndex(e => e.day === target.day && e.column === target.column);
       if (existingIdx !== -1) {
-        newEntries.splice(existingIdx, 1);
+        currentEntries.splice(existingIdx, 1);
       }
 
       // Add new entry
-      newEntries.push({
-        doctorId: activeData.doctor.id,
-        day: targetDay,
-        column: targetCol,
+      currentEntries.push({
+        doctorId,
+        day: target.day,
+        column: target.column,
       });
 
-      saveCurrentEntries(newEntries);
+      saveEntry(target.year, target.month, currentEntries);
       return;
     }
 
-    // Dragging existing entry to another cell (swap)
-    if (activeData?.entry) {
-      const fromDay = activeData.entry.day;
-      const fromCol = activeData.entry.column;
+    // Drag from table (swap or move)
+    if (activeId.startsWith('entry-') && activeEntry) {
+      const fromYear = activeEntry.year;
+      const fromMonth = activeEntry.month;
+      const fromDay = activeEntry.entry.day;
+      const fromCol = activeEntry.entry.column;
 
-      if (fromDay === targetDay && fromCol === targetCol) return;
-
-      const newEntries = [...entries];
-      const fromIdx = newEntries.findIndex(e => e.day === fromDay && e.column === fromCol);
-      const toIdx = newEntries.findIndex(e => e.day === targetDay && e.column === targetCol);
-
-      if (fromIdx !== -1) {
-        if (toIdx !== -1) {
-          // Swap positions
-          const tempDoctorId = newEntries[fromIdx].doctorId;
-          newEntries[fromIdx] = { ...newEntries[fromIdx], doctorId: newEntries[toIdx].doctorId };
-          newEntries[toIdx] = { ...newEntries[toIdx], doctorId: tempDoctorId };
-        } else {
-          // Move to empty cell
-          newEntries[fromIdx] = { ...newEntries[fromIdx], day: targetDay, column: targetCol };
-        }
+      if (fromYear === target.year && fromMonth === target.month && fromDay === target.day && fromCol === target.column) {
+        return; // Same cell
       }
 
-      saveCurrentEntries(newEntries);
-      return;
-    }
-  }, [entries, saveCurrentEntries]);
+      const fromKey = `${fromYear}-${fromMonth}`;
+      const toKey = `${target.year}-${target.month}`;
 
-  const handleEntryRemove = useCallback((day: number, column: number) => {
-    const newEntries = entries.filter(e => !(e.day === day && e.column === column));
-    saveCurrentEntries(newEntries);
-  }, [entries, saveCurrentEntries]);
+      const fromEntries = [...(entriesByMonth[fromKey] || [])];
+      const toEntries = fromKey === toKey ? fromEntries : [...(entriesByMonth[toKey] || [])];
+
+      const fromIdx = fromEntries.findIndex(e => e.day === fromDay && e.column === fromCol);
+      if (fromIdx === -1) return;
+
+      const toIdx = toEntries.findIndex(e => e.day === target.day && e.column === target.column);
+
+      if (fromKey === toKey) {
+        // Same month
+        if (toIdx !== -1) {
+          // Swap
+          const tempDoctorId = fromEntries[fromIdx].doctorId;
+          fromEntries[fromIdx] = { ...fromEntries[fromIdx], doctorId: fromEntries[toIdx].doctorId };
+          fromEntries[toIdx] = { ...fromEntries[toIdx], doctorId: tempDoctorId };
+        } else {
+          // Move
+          fromEntries[fromIdx] = { ...fromEntries[fromIdx], day: target.day, column: target.column };
+        }
+        saveEntry(fromYear, fromMonth, fromEntries);
+      } else {
+        // Different months
+        const movedEntry = fromEntries[fromIdx];
+        fromEntries.splice(fromIdx, 1);
+
+        if (toIdx !== -1) {
+          // Swap between months
+          const swappedEntry = toEntries[toIdx];
+          toEntries[toIdx] = { ...movedEntry, day: target.day, column: target.column };
+          fromEntries.push({ ...swappedEntry, day: fromDay, column: fromCol });
+        } else {
+          // Move to different month
+          toEntries.push({ ...movedEntry, day: target.day, column: target.column });
+        }
+
+        saveEntry(fromYear, fromMonth, fromEntries);
+        if (fromKey !== toKey) {
+          saveEntry(target.year, target.month, toEntries);
+        }
+      }
+    }
+  }, [activeEntry, entriesByMonth, extendedDays, saveEntry]);
+
+  const handleEntryRemove = useCallback((targetYear: number, targetMonth: number, day: number, column: number) => {
+    const key = `${targetYear}-${targetMonth}`;
+    const currentEntries = entriesByMonth[key] || [];
+    const newEntries = currentEntries.filter(e => !(e.day === day && e.column === column));
+    saveEntry(targetYear, targetMonth, newEntries);
+  }, [entriesByMonth, saveEntry]);
+
+  // Записи только для текущего месяца (для workload и export)
+  const targetMonthEntries = entriesByMonth[`${year}-${month}`] || [];
+
+  // Все дни текущего месяца (для workload)
+  const currentMonthDays = extendedDays.filter(d => d.isInTargetMonth);
+  const daysForExport = currentMonthDays.map(d => d.day);
 
   const years = Array.from({ length: 10 }, (_, i) => currentYear - 3 + i);
 
@@ -217,26 +311,25 @@ function App() {
                   </h2>
                   <ExportButtons
                     doctors={doctors}
-                    entries={entries}
+                    entries={targetMonthEntries}
                     year={year}
                     month={month}
-                    days={days}
+                    days={daysForExport}
                   />
                 </div>
                 <ScheduleTable
-                  days={days}
-                  entries={entries}
+                  extendedDays={extendedDays}
+                  entriesByMonth={entriesByMonth}
                   doctors={doctors}
-                  year={year}
-                  month={month}
+                  targetYear={year}
+                  targetMonth={month}
                   onEntryDrop={() => {}}
                   onEntryRemove={handleEntryRemove}
-                  onEntryMove={() => {}}
                 />
               </div>
 
               {/* Workload Table */}
-              <WorkloadTable doctors={doctors} entries={entries} />
+              <WorkloadTable doctors={doctors} entries={targetMonthEntries} />
             </div>
           </div>
         </main>
