@@ -54,37 +54,43 @@ interface DoctorListProps {
 
 export default function DoctorList({ doctors, onDelete, onAddClick }: DoctorListProps) {
   return (
-    <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-bold text-gray-800">Список врачей</h3>
-        <button
-          onClick={onAddClick}
-          className="bg-green-600 text-white px-3 py-1.5 rounded-lg text-sm hover:bg-green-700 transition font-medium flex items-center gap-1"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          Добавить
-        </button>
-      </div>
-      <div className="text-xs text-gray-500 mb-3 italic">
-        Перетащите врача на ячейку графика для назначения дежурства
-      </div>
-      {doctors.length === 0 ? (
-        <div className="text-center py-8 text-gray-400">
-          <svg className="w-12 h-12 mx-auto mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-          </svg>
-          <p>Список врачей пуст</p>
-          <p className="text-xs">Нажмите «Добавить» для добавления</p>
+    <div className="bg-gray-50 rounded-xl border border-gray-200 flex flex-col max-h-full">
+      {/* Sticky header */}
+      <div className="sticky top-0 z-10 bg-gray-50 rounded-t-xl px-4 pt-4 pb-3 border-b border-gray-200">
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-lg font-bold text-gray-800">Список врачей</h3>
+          <button
+            onClick={onAddClick}
+            className="bg-green-600 text-white px-3 py-1.5 rounded-lg text-sm hover:bg-green-700 transition font-medium flex items-center gap-1"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Добавить
+          </button>
         </div>
-      ) : (
-        <div className="space-y-1 max-h-[500px] overflow-y-auto">
-          {doctors.map(doctor => (
-            <DraggableDoctorCard key={doctor.id} doctor={doctor} onDelete={onDelete} />
-          ))}
+        <div className="text-xs text-gray-500 italic">
+          Перетащите врача на ячейку графика для назначения дежурства
         </div>
-      )}
+      </div>
+      {/* Scrollable content */}
+      <div className="flex-1 overflow-y-auto px-4 py-3">
+        {doctors.length === 0 ? (
+          <div className="text-center py-8 text-gray-400">
+            <svg className="w-12 h-12 mx-auto mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            <p>Список врачей пуст</p>
+            <p className="text-xs">Нажмите «Добавить» для добавления</p>
+          </div>
+        ) : (
+          <div className="space-y-1">
+            {doctors.map(doctor => (
+              <DraggableDoctorCard key={doctor.id} doctor={doctor} onDelete={onDelete} />
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

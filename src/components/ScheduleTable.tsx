@@ -5,9 +5,21 @@ interface ScheduleTableProps {
   days: number[];
   entries: ScheduleEntry[];
   doctors: Doctor[];
+  year: number;
+  month: number;
   onEntryDrop: (day: number, column: number) => void;
   onEntryRemove: (day: number, column: number) => void;
   onEntryMove: (fromDay: number, fromCol: number, toDay: number, toCol: number) => void;
+}
+
+function isWeekend(year: number, month: number, day: number): boolean {
+  const dayOfWeek = new Date(year, month - 1, day).getDay();
+  return dayOfWeek === 0 || dayOfWeek === 6; // 0 = воскресенье, 6 = суббота
+}
+
+function getDayName(year: number, month: number, day: number): string {
+  const days = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+  return days[new Date(year, month - 1, day).getDay()];
 }
 
 function DroppableCell({
@@ -16,12 +28,14 @@ function DroppableCell({
   entry,
   doctor,
   onRemove,
+  isWeekendDay,
 }: {
   day: number;
   column: number;
   entry: ScheduleEntry | undefined;
   doctor: Doctor | undefined;
   onRemove: () => void;
+  isWeekendDay: boolean;
 }) {
   const { setNodeRef, isOver } = useDroppable({
     id: `cell-${day}-${column}`,
@@ -34,7 +48,7 @@ function DroppableCell({
     return (
       <td
         ref={setNodeRef}
-        className={`border border-gray-200 p-0.5 min-w-[110px] h-10 text-center transition-colors ${isOver ? 'bg-blue-100 ring-2 ring-blue-400 ring-inset' : isDayShift ? 'bg-white' : 'bg-gray-50'}`}
+        className={`border border-gray-200 p-0.5 min-w-[110px] h-10 text-center transition-colors ${isOver ? 'bg-blue-100 ring-2 ring-blue-400 ring-inset' : isWeekendDay ? (isDayShift ? 'bg-amber-50/60' : 'bg-amber-50/40') : isDayShift ? 'bg-white' : 'bg-gray-50'}`}
       >
         <div className="h-full flex items-center justify-center text-xs text-gray-300">
           {isOver ? '↓' : ''}
@@ -46,7 +60,7 @@ function DroppableCell({
   return (
     <td
       ref={setNodeRef}
-      className={`border border-gray-200 p-0.5 min-w-[110px] h-10 transition-colors ${isOver ? 'bg-blue-100 ring-2 ring-blue-400 ring-inset' : ''}`}
+      className={`border border-gray-200 p-0.5 min-w-[110px] h-10 transition-colors ${isOver ? 'bg-blue-100 ring-2 ring-blue-400 ring-inset' : isWeekendDay ? 'bg-amber-50/50' : ''}`}
     >
       <DraggableEntry entry={entry} doctor={doctor} onRemove={onRemove} />
     </td>
@@ -105,6 +119,8 @@ export default function ScheduleTable({
   days,
   entries,
   doctors,
+  year,
+  month,
   onEntryRemove,
 }: ScheduleTableProps) {
   const getEntry = (day: number, column: number) => {
@@ -120,7 +136,7 @@ export default function ScheduleTable({
       <table className="w-full border-collapse text-sm">
         <thead>
           <tr className="bg-gradient-to-r from-blue-600 to-blue-700 text-white">
-            <th className="border border-blue-500 p-2 text-center font-semibold sticky left-0 bg-blue-700 z-10 min-w-[50px]">
+            <th className="border border-blue-500 p-2 text-center font-semibold sticky left-0 bg-blue-700 z-10 min-w-[70px]">
               День
             </th>
             {COLUMN_SHORT.map((col, idx) => (
@@ -135,27 +151,35 @@ export default function ScheduleTable({
           </tr>
         </thead>
         <tbody>
-          {days.map(day => (
-            <tr key={day} className="hover:bg-blue-50/30">
-              <td className="border border-gray-200 p-2 text-center font-bold text-gray-700 sticky left-0 bg-white z-10">
-                {day}
-              </td>
-              {[0, 1, 2, 3, 4, 5, 6, 7].map(col => {
-                const entry = getEntry(day, col);
-                const doctor = entry ? getDoctor(entry.doctorId) : undefined;
-                return (
-                  <DroppableCell
-                    key={`${day}-${col}`}
-                    day={day}
-                    column={col}
-                    entry={entry}
-                    doctor={doctor}
-                    onRemove={() => onEntryRemove(day, col)}
-                  />
-                );
-              })}
-            </tr>
-          ))}
+          {days.map(day => {
+            const weekend = isWeekend(year, month, day);
+            const dayName = getDayName(year, month, day);
+            return (
+              <tr key={day} className={`hover:bg-blue-50/30 ${weekend ? 'bg-amber-50/30' : ''}`}>
+                <td className={`border border-gray-200 p-2 text-center sticky left-0 z-10 ${weekend ? 'bg-amber-50 font-extrabold text-amber-900' : 'bg-white font-bold text-gray-700'}`}>
+                  <div className="text-base">{day}</div>
+                  <div className={`text-xs ${weekend ? 'text-amber-700 font-bold' : 'text-gray-400 font-normal'}`}>
+                    {dayName}
+                  </div>
+                </td>
+                {[0, 1, 2, 3, 4, 5, 6, 7].map(col => {
+                  const entry = getEntry(day, col);
+                  const doctor = entry ? getDoctor(entry.doctorId) : undefined;
+                  return (
+                    <DroppableCell
+                      key={`${day}-${col}`}
+                      day={day}
+                      column={col}
+                      entry={entry}
+                      doctor={doctor}
+                      onRemove={() => onEntryRemove(day, col)}
+                      isWeekendDay={weekend}
+                    />
+                  );
+                })}
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

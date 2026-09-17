@@ -199,8 +199,8 @@ function App() {
         {/* Main Content */}
         <main className="max-w-full mx-auto px-4 py-6">
           <div className="grid grid-cols-1 xl:grid-cols-[280px_1fr] gap-6">
-            {/* Sidebar - Doctor List */}
-            <aside>
+            {/* Sidebar - Doctor List (sticky) */}
+            <aside className="xl:sticky xl:top-4 xl:self-start xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto">
               <DoctorList
                 doctors={doctors}
                 onDelete={handleDeleteDoctor}
@@ -227,6 +227,8 @@ function App() {
                   days={days}
                   entries={entries}
                   doctors={doctors}
+                  year={year}
+                  month={month}
                   onEntryDrop={() => {}}
                   onEntryRemove={handleEntryRemove}
                   onEntryMove={() => {}}
