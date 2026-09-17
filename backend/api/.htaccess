@@ -1,0 +1,23 @@
+# Apache .htaccess для API
+# Разместить в /var/www/duty-schedule/api/
+
+RewriteEngine On
+
+# Запретить доступ к config.php
+<Files "config.php">
+    Order Allow,Deny
+    Deny from all
+</Files>
+
+# Запретить доступ к скрытым файлам
+<FilesMatch "^\.">
+    Order Allow,Deny
+    Deny from all
+</FilesMatch>
+
+# Установить кодировку
+AddDefaultCharset UTF-8
+
+# Отключить отображение ошибок в продакшне
+php_flag display_errors Off
+php_flag log_errors On
