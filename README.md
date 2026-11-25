@@ -81,6 +81,34 @@ sudo bash update.sh
 
 📖 [Подробная инструкция по развёртыванию](DEPLOY_UBUNTU.md)
 
+### Развёртывание в интранете (без SSL)
+
+Для развёртывания в корпоративной сети без SSL-сертификатов:
+
+```bash
+# Автоопределение IP-адреса
+sudo bash deploy-intranet.sh
+
+# Указать конкретный адрес или имя хоста
+sudo bash deploy-intranet.sh --host=192.168.1.100
+sudo bash deploy-intranet.sh --host=duty.med.local
+
+# Нестандартный порт
+sudo bash deploy-intranet.sh --host=medserver --port=8080
+
+# Без настройки firewall и обновления системы
+sudo bash deploy-intranet.sh --host=duty.local --no-firewall --no-update
+```
+
+**Особенности интранет-развёртывания:**
+- ✅ HTTP только (без HTTPS)
+- ✅ Работа по IP или внутреннему имени
+- ✅ Опциональная настройка firewall
+- ✅ Поддержка нестандартных портов
+- ✅ Готово к работе за корпоративным прокси
+
+📖 [Подробная инструкция для интранета](DEPLOY_INTRANET.md)
+
 ## 📖 Документация
 
 ### [Инструкция по развёртыванию](README_DEPLOY.md)
